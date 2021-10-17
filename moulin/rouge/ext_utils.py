@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2021 EPAM Systems
+"""
+External utils interfaces/wrappers for rouge image builder
+"""
+
+from typing import BinaryIO, Union
+import subprocess
+
+
+def _run_cmd(args):
+    print("Running", " ".join(args))
+    subprocess.run(args, check=True)
+
+
+def dd(file_in: Union[str, BinaryIO], file_out: BinaryIO, out_offset: int):
+    "Run dd with the given arguments"
+    # Try to guess block size. We would like to use as big block as
+    # possible. But we need take into account that "seek" parameter
+    # uses block size as the unit.
+    blocksize: int = 16384
+    while out_offset % blocksize != 0:
+        blocksize //= 2
+
+    if isinstance(file_in, str):
+        file_in_path = file_in
+    else:
+        file_in_path = file_in.name
+    args = [
+        "dd",
+        f"if={file_in_path}",
+        f"of={file_out.name}",
+        f"bs={blocksize}",
+        f"seek={out_offset // blocksize}",
+        "status=progress",
+        "conv=sparse",
+        "conv=notrunc",
+    ] #yapf: disable
+    _run_cmd(args)
+
+
+def simg2img(file_in: Union[str, BinaryIO], file_out: BinaryIO):
+    "Run simg2img with the given arguments"
+    if isinstance(file_in, str):
+        file_in_path = file_in
+    else:
+        file_in_path = file_in.name
+    args = [
+        "simg2img",
+        file_in_path,
+        file_out.name,
+    ] #yapf: disable
+    _run_cmd(args)
+
+
+def mkext4fs(file_out, contents_dir=None):
+    args = ["mkfs.ext4", file_out.name]
+    if contents_dir:
+        args.append("-d")
+        args.append(contents_dir)
+
+    _run_cmd(args)
