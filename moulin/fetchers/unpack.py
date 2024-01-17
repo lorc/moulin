@@ -8,6 +8,7 @@ from typing import List
 from moulin.yaml_helpers import YAMLProcessingError
 from moulin.yaml_wrapper import YamlValue
 from moulin import ninja_syntax
+from moulin.utils import create_stamp_name
 
 
 def get_fetcher(conf: YamlValue, build_dir: str, generator: ninja_syntax.Writer):
@@ -18,10 +19,10 @@ def get_fetcher(conf: YamlValue, build_dir: str, generator: ninja_syntax.Writer)
 def gen_build_rules(generator: ninja_syntax.Writer):
     """Generate build rules using Ninja generator"""
     generator.rule("tar_unpack",
-                   command="mkdir -p $out_dir && tar -m -C $out_dir -xf $in",
+                   command="mkdir -p $out_dir && tar -m -C $out_dir -xf $in && touch $out",
                    description="Unpack $in with tar")
     generator.rule("zip_unpack",
-                   command="mkdir -p $out_dir && unzip -DD -n $in -d $out_dir",
+                   command="mkdir -p $out_dir && unzip -DD -n $in -d $out_dir && touch $out",
                    description="Unpack $in with unzip")
     generator.newline()
 
@@ -46,17 +47,13 @@ class UnpackFetcher:
             raise YAMLProcessingError(f"Unkown archive type: {self.type}",
                                       self.conf["archive_type"].mark)
 
-        if not os.path.exists(self.fname):
-            raise YAMLProcessingError(f"File \"{self.fname}\" does not exist",
-                                      self.conf["file"].mark)
-
     def gen_fetch(self) -> List[str]:
         """Generate instructions to unpack archive"""
         rule_name = f"{self.type}_unpack"
-        files = self.get_file_list()
-        self.generator.build(files, rule_name, self.fname, variables={"out_dir": self.out_dir})
+        stamp = create_stamp_name(self.out_dir, self.fname)
+        self.generator.build(stamp, rule_name, self.fname, variables={"out_dir": self.out_dir})
 
-        return files
+        return stamp
 
     def get_file_list(self) -> List[str]:
         "Get list of files in archive"
