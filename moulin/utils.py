@@ -5,6 +5,10 @@
 import os.path
 import sys
 import re
+from typing import List
+from moulin import ninja_syntax
+
+FETCHERDEP_RULE_NAME = "moulin_fetcherdep"
 
 
 def create_stamp_name(*args):
@@ -14,11 +18,17 @@ def create_stamp_name(*args):
     return os.path.abspath(path)
 
 
-def construct_fetcher_dep_cmd() -> str:
-    "Generate command line to generate fetcher dependency file"
-    this_script = os.path.abspath(sys.argv[0])
-    args = " ".join(sys.argv[1:])
-    return f"{this_script} {args} --fetcherdep $name"
+def create_dyndep_fname(component_name: str) -> str:
+    return f".moulin_{component_name}.d"
+
+
+def generate_dyndep_build(generator: ninja_syntax.Writer, component_name: str,
+                          actual_targets: List[str]) -> None:
+    generator.build(create_dyndep_fname(component_name),
+                    FETCHERDEP_RULE_NAME,
+                    actual_targets,
+                    variables={"name": component_name})
+    pass
 
 
 def escape(val: str) -> str:

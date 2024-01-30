@@ -15,6 +15,7 @@ from moulin import make_syntax
 from moulin import rouge
 from moulin import yaml_helpers as yh
 from moulin.build_conf import MoulinConfiguration
+from moulin.utils import FETCHERDEP_RULE_NAME, create_dyndep_fname
 
 BUILD_FILENAME = 'build.ninja'
 
@@ -27,7 +28,7 @@ def generate_build(conf: MoulinConfiguration,
     """
     generator = ninja_syntax.Writer(open(ninja_build_fname, 'w'), width=120)
 
-    _gen_regenerate(conf_file_name, generator)
+    _gen_header(conf_file_name, generator)
 
     rouge.gen_build_rules(generator)
 
@@ -66,7 +67,8 @@ def generate_build(conf: MoulinConfiguration,
                                              generator)
 
         build_stamps = builder.gen_build()
-        generator.build(comp_name, "phony", build_stamps)
+        if comp_name != build_dir:
+            generator.build(comp_name, "phony", build_stamps)
         generator.newline()
         if component.get("default", False).as_bool:
             generator.default(comp_name)
@@ -76,7 +78,8 @@ def generate_build(conf: MoulinConfiguration,
 
 def generate_fetcher_dyndep(conf: MoulinConfiguration, component: str):
     _flatten_sources(conf)
-    generator = make_syntax.Writer(open(f".moulin_{component}.d", 'w'), width=120)
+    generator = ninja_syntax.Writer(open(create_dyndep_fname(component), "tw"), width=120)
+    generator.variable("ninja_dyndep_version", "1")
 
     builder_modules, fetcher_modules = _get_modules(conf, None)
     component_node = conf.get_root()["components"][component]
@@ -94,15 +97,27 @@ def generate_fetcher_dyndep(conf: MoulinConfiguration, component: str):
             fetcher_module = fetcher_modules[source_type]
             fetcher = fetcher_module.get_fetcher(source, build_dir, generator)
             deps.extend(fetcher.get_file_list())
-    generator.simple_dep(targets, deps)
+    # Ninja has strange issue when it does not allow more than one explicit
+    # output in the dyndep file
+    generator.build(targets[0], "dyndep", implicit=deps)
 
 
-def _gen_regenerate(conf_file_name, generator: ninja_syntax.Writer):
+def _gen_header(conf_file_name, generator: ninja_syntax.Writer):
+    # Force minimal ninja version
+    generator.variable("ninja_required_version", "1.10")
+    generator.newline()
+
     this_script = os.path.abspath(sys.argv[0])
     args = " ".join(sys.argv[1:])
+
+    # Create generator rule (to rebuld build.ninja when YAML is changed)
     generator.rule("regenerate", command=f"{this_script} {args}", generator=1)
     generator.newline()
     generator.build(BUILD_FILENAME, "regenerate", [this_script, conf_file_name])
+    generator.newline()
+
+    # Create dyndep generator rule
+    generator.rule(FETCHERDEP_RULE_NAME, f"{this_script} {args} --fetcherdep $name")
     generator.newline()
 
 

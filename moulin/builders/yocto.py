@@ -7,12 +7,11 @@ Yocto builder module
 import os.path
 import shlex
 from typing import List, Tuple, cast
-from moulin.utils import create_stamp_name, construct_fetcher_dep_cmd
+from moulin.utils import create_stamp_name, create_dyndep_fname, generate_dyndep_build
 from moulin import ninja_syntax
 from moulin.yaml_wrapper import YamlValue
 from moulin.yaml_helpers import YAMLProcessingError
 import logging
-
 
 YOCTO_CORE_LAYERS = ["../poky/meta", "../poky/meta-poky", "../poky/meta-yocto-bsp"]
 log = logging.getLogger(__name__)
@@ -49,8 +48,10 @@ def gen_build_rules(generator: ninja_syntax.Writer):
     # If the file doesn't exist yet, the logic adds the layers to the Yocto
     # and updates the cache of the added layers for further usage.
     cmd = " ".join([
-        r'cd $yocto_dir', r'&&',
-        r'source poky/oe-init-build-env $work_dir', r'&&',
+        r'cd $yocto_dir',
+        r'&&',
+        r'source poky/oe-init-build-env $work_dir',
+        r'&&',
         r'if [ -e \"$out\" ];',
         r'then current_layers=\$$(cat \"$out\");',
         r'if [ \"\$$current_layers\" != \"$layers\" ];',
@@ -59,7 +60,7 @@ def gen_build_rules(generator: ninja_syntax.Writer):
         r'fi;',
         r'else bitbake-layers add-layer $layers && echo \"$layers\" > $out;',
         r'fi;',
-        ])
+    ])
 
     generator.rule("yocto_add_layers",
                    command=f'bash -c "{cmd}"',
@@ -86,8 +87,6 @@ def gen_build_rules(generator: ninja_syntax.Writer):
 
     # Invoke bitbake. This rule uses "console" pool so we can see the bitbake output.
     cmd = " && ".join([
-        # Generate fetcher dependency file
-        construct_fetcher_dep_cmd(),
         "cd $yocto_dir",
         "source poky/oe-init-build-env $work_dir",
         "bitbake $target",
@@ -96,8 +95,6 @@ def gen_build_rules(generator: ninja_syntax.Writer):
                    command=f'bash -c "{cmd}"',
                    description="Yocto Build: $name",
                    pool="console",
-                   deps="gcc",
-                   depfile=".moulin_$name.d",
                    restat=True)
 
 
@@ -177,8 +174,9 @@ your YAML Moulin configuration files.
     result: List[str] = []
     for layer in layers:
         if layer in YOCTO_CORE_LAYERS:
-            log.warning("You explicitly specified the %s layer. This layer is the default layer in Poky."
-                        " Please, remove this layer from your YAML configuration.", layer)
+            log.warning(
+                "You explicitly specified the %s layer. This layer is the default layer in Poky."
+                " Please, remove this layer from your YAML configuration.", layer)
         else:
             result.append(layer)
     return result
@@ -188,6 +186,7 @@ class YoctoBuilder:
     """
     YoctoBuilder class generates Ninja rules for given build configuration
     """
+
     def __init__(self, conf: YamlValue, name: str, build_dir: str, src_stamps: List[str],
                  generator: ninja_syntax.Writer):
         self.conf = conf
@@ -281,12 +280,18 @@ class YoctoBuilder:
         else:
             deps = []
         deps.extend(conf_deps)
+
+        generate_dyndep_build(self.generator, self.name, deps)
+        dyndep_file = create_dyndep_fname(self.name)
+
         self.generator.build(targets,
                              "yocto_build",
                              deps,
                              variables=dict(common_variables,
                                             target=self.conf["build_target"].as_str,
-                                            name=self.name))
+                                            name=self.name),
+                             dyndep=dyndep_file,
+                             order_only=[dyndep_file])
 
         return targets
 

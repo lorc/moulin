@@ -24,6 +24,8 @@ def gen_build_rules(generator: ninja_syntax.Writer):
     generator.rule("zip_unpack",
                    command="mkdir -p $out_dir && unzip -DD -n $in -d $out_dir && touch $out",
                    description="Unpack $in with unzip")
+    # generator.rule("unpack_fetcher_dyndep",
+    #                command=""
     generator.newline()
 
 
