@@ -388,6 +388,8 @@ additional layers and :code:`bitbake` used to perform the build.
       - [MACHINE, "machine-name"]
       - [DISTRO_FEATURES_remove, "feature_to_remove"]
       - [DISTRO_FEATURES_append, "feature_to_add"]
+    layers_conf:      # Optional
+      - ["LAYERSERIES_COMPAT_ХХХ:append", "dunfell"]
     layers:           # Optional
       - "../poky/meta-yocto-bsp"
       - "../meta-other-layer/"
@@ -422,6 +424,9 @@ needed if you are building multiple VMs with cross-dependencies.
   same key. Those entries will not be written straight into
   :code:`local.conf`. Instead new file :code:`moulin.conf` will be
   created. This file then will be included from :code:`local.conf`.
+
+* :code:`layers_conf` - very similar to :code:`conf`, but values are
+  placed to :code:`bblayers.conf` file instead of :code:`local.conf`
 
 * :code:`layers` - list of additional layers. Those layers will be
   added to the build using :code:`bitbake-layers add-layer {layers}`
